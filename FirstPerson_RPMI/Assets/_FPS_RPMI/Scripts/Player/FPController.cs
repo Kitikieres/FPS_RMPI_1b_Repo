@@ -1,4 +1,5 @@
 using JetBrains.Annotations;
+using UnityEditor.Timeline;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -14,6 +15,13 @@ public class FPController : MonoBehaviour
     [SerializeField] float maxForce = 1.0f; //fuerza maxima de aceleracion
     [SerializeField] float sensitivity = 0.1f;
 
+    [Header("Jump and GroundCheck")]
+    [SerializeField] float jumpForce = 5f;
+    [SerializeField] bool isGrounded;
+    [SerializeField] Transform groundCheck;
+    [SerializeField] float groundCheckRadius = 0.3f;
+    [SerializeField] LayerMask groundLayer;
+
 
     [Header("Player State Bools")]
     [SerializeField] bool isSprinting;
@@ -24,6 +32,7 @@ public class FPController : MonoBehaviour
     //Variables de autoreferencia
 
     Rigidbody rb;
+    Animator anim;
 
     //Variables de input
 
@@ -35,6 +44,7 @@ public class FPController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        anim = GetComponent<Animator>();
     }
 
 
@@ -53,11 +63,58 @@ public class FPController : MonoBehaviour
     void Update()
     {
 
-      
 
+        //GroundCheck
+        isGrounded = Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
 
 
     }
+
+    private void FixedUpdate()
+    {
+
+        Movement();
+    }
+
+    private void LateUpdate()
+    {
+
+        CameraLook();
+    }
+    void CameraLook()
+    {
+        // rotacion del personaje horizontal
+        transform.Rotate(Vector3.up * lookInput.x * sensitivity);
+        // rotacion de la camara
+        lookRotation += (-lookInput.y * sensitivity);
+        lookRotation = Mathf.Clamp(lookRotation, -90, 90);
+        camHolder.transform.localEulerAngles = new Vector3(lookRotation, 0f, 0f);
+    }
+
+    void Movement()
+    {
+        //definir 2 vectores de aceleracion
+        Vector3 currentVelocity = rb.linearVelocity;
+        Vector3 targetVelocity = new Vector3(moveInput.x, 0, moveInput.y);
+        //direccion a alcanzar le multiplicamos la velocidad
+        targetVelocity *= isCrouching ? crouchSpeed : isSprinting ? sprintSpeed : speed;
+        //convertirlo en eje mundial
+        targetVelocity = transform.TransformDirection(targetVelocity);
+
+        //calcular el cambio de velocidad
+        Vector3 velocityChange = (targetVelocity - currentVelocity);
+        velocityChange = new Vector3(velocityChange.x, 0, velocityChange.z);
+        velocityChange = Vector3.ClampMagnitude(velocityChange, maxForce);
+        //Aplicacion del movimiento (DIRECION MAS ACELERACION)
+        rb.AddForce(velocityChange, ForceMode.VelocityChange);
+
+
+    }
+    void Jump()
+    {
+        if (isGrounded) rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+    }
+
 
     #region InputMetods
 
@@ -71,15 +128,20 @@ public class FPController : MonoBehaviour
     }
     public void OnJump(InputAction.CallbackContext context)
     {
-
+        if (context.performed) Jump();
     }
     public void OnCrouch(InputAction.CallbackContext context)
     {
-
+        if (context.performed)
+        {
+            isCrouching = !isCrouching;
+            anim.SetBool("isCrouching", isCrouching);
+        }
     }
     public void OnSprint(InputAction.CallbackContext context)
     {
-
+        if (context.performed && !isCrouching) isSprinting = true;
+        if (context.canceled) isSprinting = false; 
     }
 
 
